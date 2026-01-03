@@ -8,7 +8,7 @@ class ConsistentHashing {
     private owners: string[] = [] // This is a parallel array with tokens
 
     // basic sha256 hash
-    private hashToUint32(input: string): number {
+    static hashToUint32(input: string): number {
         const hex = crypto.createHash("sha256").update(input).digest("hex");
         // 8 hex chars = 32 bits
         return Number.parseInt(hex.slice(0, 8), 16) >>> 0; // >>>0 forces unsigned 32-bit
@@ -34,7 +34,7 @@ class ConsistentHashing {
     }
 
     public addServer(serverName: string): void {
-        const serverId = this.hashToUint32(serverName);
+        const serverId = ConsistentHashing.hashToUint32(serverName);
         const serverInsertionIndex = this.findPlacement(serverId)
         // insert new server, servers are tied to two parallel arrays (tokens, owners)
         this.tokens.splice(serverInsertionIndex, 0, serverId) // tokens update
@@ -46,13 +46,46 @@ class ConsistentHashing {
             throw new Error("Can't get server, Zero servers exist currently.");
           }
         
-          const keyId = this.hashToUint32(key);
+          const keyId = ConsistentHashing.hashToUint32(key);
           const keyIndex = this.findPlacement(keyId);
           // this is because this.findPlacement can return a tokens.length, and when this happens we wrap
           const i = keyIndex === this.tokens.length ? 0 : keyIndex; 
         
           return this.owners[i];
     }
+
+    public removeServer(serverName: string): boolean{
+        const serverIndex = this.owners.indexOf(serverName)
+        if(serverIndex > -1){
+            // remove server at the respective index in each array (tokens & owners)
+            this.tokens.splice(serverIndex, 1)
+            this.owners.splice(serverIndex, 1)
+            return true
+        } else{
+            return false
+        }
+    }
+
+
+    // Here is a virtual node class, this is an Inner Static class.
+    // Note, in JS/TS there aren't true static classes so this a static property
+    static VirtualNode = class VirtualNode {
+        public static virtualNodeCount = new Map<string, number>()
+      
+        public readonly forwardTo: string;
+        public virtualNodeServeName: string;
+        public readonly token: number;
+      
+        constructor(forwardTo: string) {
+          this.forwardTo = forwardTo;
+          const n = VirtualNode.virtualNodeCount.get(this.forwardTo) ?? 1
+          VirtualNode.virtualNodeCount.set(forwardTo, n + 1)
+          this.virtualNodeServeName = `${forwardTo}_${n}`;
+          this.token = ConsistentHashing.hashToUint32(this.virtualNodeServeName);
+        }
+      };
+
+      
 
 }
 
