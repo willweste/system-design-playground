@@ -5,7 +5,7 @@ class ConsistentHashing {
     // is the server and the token is the SHA value of a server. A Map cannot 
     // be used because we need these values ordered to traverse clockwise & anticlockwise.
     private tokens: number[] = [] // This is a parallel array with owners
-    private owners: string[] = [] // This is a parallel array with tokens
+    public owners: string[] = [] // This is a parallel array with tokens
 
     // basic sha256 hash
     static hashToUint32(input: string): number {
@@ -33,12 +33,33 @@ class ConsistentHashing {
         return low
     }
 
+    private getServerLocations(serverName: string): number[]{
+        const res: number[] = []
+        for(let i = 0; i < this.owners.length; i++){
+            if(this.owners[i] == serverName){
+                res.push(i)
+            }
+        }
+        return res
+    }
+
     public addServer(serverName: string): void {
         const serverId = ConsistentHashing.hashToUint32(serverName);
         const serverInsertionIndex = this.findPlacement(serverId)
         // insert new server, servers are tied to two parallel arrays (tokens, owners)
         this.tokens.splice(serverInsertionIndex, 0, serverId) // tokens update
         this.owners.splice(serverInsertionIndex, 0, serverName) // owners update 
+
+        // When a server is created, we will also create 5 VirtualNodes along with it
+        for(let i = 0; i < 5; i++){
+            const node = new ConsistentHashing.VirtualNode(serverName)
+            const nodeId = node.token
+            const nodeInsertionIndex = this.findPlacement(nodeId)
+
+            // insert new server, servers are tied to two parallel arrays (tokens, owners)
+            this.tokens.splice(nodeInsertionIndex, 0, nodeId) // tokens update
+            this.owners.splice(nodeInsertionIndex, 0, node.forwardTo) // owners update    
+        }
     }
 
     public getServer(key: string): string{
@@ -54,17 +75,28 @@ class ConsistentHashing {
           return this.owners[i];
     }
 
-    public removeServer(serverName: string): boolean{
-        const serverIndex = this.owners.indexOf(serverName)
-        if(serverIndex > -1){
-            // remove server at the respective index in each array (tokens & owners)
-            this.tokens.splice(serverIndex, 1)
-            this.owners.splice(serverIndex, 1)
-            return true
-        } else{
-            return false
+    public removeServer(serverName: string): boolean {
+        let removed = false;
+      
+        const newTokens: number[] = [];
+        const newOwners: string[] = [];
+      
+        for (let i = 0; i < this.owners.length; i++) {
+          if (this.owners[i] === serverName) {
+            removed = true;
+            continue;
+          }
+          newTokens.push(this.tokens[i]);
+          newOwners.push(this.owners[i]);
         }
-    }
+      
+        if (removed) {
+          this.tokens = newTokens;
+          this.owners = newOwners;
+        }
+      
+        return removed;
+      }      
 
 
     // Here is a virtual node class, this is an Inner Static class.
@@ -92,3 +124,6 @@ class ConsistentHashing {
 const hash = new ConsistentHashing();
 hash.addServer('east')
 console.log(hash.getServer('user12'))
+console.log(hash.owners)
+hash.removeServer('east')
+console.log(hash.owners)
